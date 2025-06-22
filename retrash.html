@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+  // Trigger native share dialog
+  function shareApp() {
+    if (navigator.share) {
+      navigator.share({
+        title: 'ReTrash App',
+        text: 'Aplikasi pendataan rosok praktis',
+        url: 'https://link-aplikasi-anda.com'
+      });
+    } else {
+      // Fallback untuk browser yang tidak support
+      alert('Copy link ini: https://link-aplikasi-anda.com');
+    }
+  }
+</script>
+
+<!-- Tambahkan tombol share di UI -->
+<button onclick="shareApp()">
+  <i class="fas fa-share"></i> Bagikan Aplikasi
+</button>
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#047857">
+
+    <!-- iOS Support -->
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+    <meta name="apple-mobile-web-app-status-bar" content="#047857">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReTrash - Sistem Pendataan Rosok</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .transaction-item {
+            transition: all 0.2s ease;
+        }
+        
+        .transaction-item:active {
+            transform: scale(0.98);
+        }
+        
+        /* Print styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            
+            body {
+                padding: 0;
+                margin: 0;
+                background: white;
+                color: black;
+            }
+            
+            .print-section {
+                page-break-after: always;
+            }
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: black;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Import Modal -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3 class="text-lg font-semibold mb-4">Impor Data</h3>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Pilih File JSON</label>
+                <input type="file" id="importFile" accept=".json" class="w-full p-2 border border-gray-300 rounded-md">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Mode Impor:</label>
+                <select id="importMode" class="w-full p-2 border border-gray-300 rounded-md">
+                    <option value="merge">Gabungkan dengan data saat ini</option>
+                    <option value="replace">Ganti semua data saat ini</option>
+                </select>
+            </div>
+            <button id="confirmImport" class="w-full py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                Impor Data
+            </button>
+        </div>
+    </div>
+
+    <!-- Export Options Modal -->
+    <div id="exportModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3 class="text-lg font-semibold mb-4">Ekspor Data</h3>
+            <div class="space-y-3">
+                <button id="exportCurrent" class="w-full py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    Ekspor Data Saat Ini
+                </button>
+                <button id="exportBackup" class="w-full py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                    Buat Backup Lengkap
+                </button>
+                <button id="exportStats" class="w-full py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                    Ekspor Statistik Saja
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto p-4 max-w-3xl">
+        <header class="mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-green-700">
+                        <i class="fas fa-recycle mr-2"></i> ReTrash
+                    </h1>
+                    <p class="text-sm text-gray-600">Sistem Pendataan Rosok</p>
+                </div>
+                <div class="text-right">
+                    <p id="current-date" class="text-sm font-medium"></p>
+                    <p id="current-time" class="text-xs text-gray-500"></p>
+                </div>
+            </div>
+        </header>
+
+        <div class="no-print">
+            <div class="tabs mb-4">
+                <div class="flex border-b">
+                    <button id="home-tab" class="tab-button active px-4 py-2 font-medium text-green-700 border-b-2 border-green-700">
+                        <i class="fas fa-home mr-2"></i> Beranda
+                    </button>
+                    <button id="add-tab" class="tab-button px-4 py-2 font-medium text-gray-500">
+                        <i class="fas fa-plus-circle mr-2"></i> Tambah
+                    </button>
+                    <button id="history-tab" class="tab-button px-4 py-2 font-medium text-gray-500">
+                        <i class="fas fa-history mr-2"></i> Riwayat
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="home-content" class="tab-content active">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4 text-green-700">Ringkasan Hari Ini</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-green-50 p-4 rounded-lg border border-green-100">
+                        <p class="text-sm text-green-600">Total Transaksi</p>
+                        <p id="total-transactions" class="text-2xl font-bold text-green-700">0</p>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                        <p class="text-sm text-blue-600">Total Berat</p>
+                        <p id="total-weight" class="text-2xl font-bold text-blue-700">0 kg</p>
+                    </div>
+                    <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                        <p class="text-sm text-purple-600">Total Nilai</p>
+                        <p id="total-value" class="text-2xl font-bold text-purple-700">Rp 0</p>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <h3 class="font-medium mb-2">Statistik Jenis Rosok</h3>
+                    <div id="item-stats" class="space-y-2">
+                        <!-- Stats will be populated by JS -->
+                    </div>
+                </div>
+                
+                <div class="flex justify-end space-x-2 no-print">
+                    <button id="print-btn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">
+                        <i class="fas fa-print mr-2"></i> Cetak Laporan
+                    </button>
+                    <button id="export-btn" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                        <i class="fas fa-file-export mr-2"></i> Ekspor Data
+                    </button>
+                    <button id="import-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        <i class="fas fa-file-import mr-2"></i> Impor Data
+                    </button>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 no-print">
+                <h2 class="text-xl font-semibold mb-4 text-green-700">Transaksi Terakhir</h2>
+                <div id="recent-transactions">
+                    <p class="text-gray-500 text-center py-4">Belum ada transaksi</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="add-content" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4 text-green-700">Tambah Transaksi</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Rosok</label>
+                        <select id="item-select" class="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500">
+                            <option value="" disabled selected>Pilih Jenis Rosok</option>
+                            <option value="besi">Besi</option>
+                            <option value="plastik">Plastik</option>
+                            <option value="kertas">Kertas</option>
+                            <option value="aluminium">Aluminium</option>
+                            <option value="tembaga">Tembaga</option>
+                            <option value="kardus">Kardus</option>
+                            <option value="botol">Botol Plastik</option>
+                            <option value="lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Berat (kg)</label>
+                        <input id="weight-input" type="number" step="0.1" class="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500" placeholder="0.0">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Harga per kg (Rp)</label>
+                        <input id="price-input" type="number" class="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500" placeholder="0">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Penyetor (opsional)</label>
+                        <input id="customer-input" type="text" class="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500" placeholder="Nama penyetor">
+                    </div>
+                    
+                    <div class="pt-2">
+                        <button id="save-btn" class="w-full py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium">
+                            <i class="fas fa-save mr-2"></i> Simpan Transaksi
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="history-content" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-green-700">Riwayat Transaksi</h2>
+                    <div class="flex space-x-2">
+                        <button id="filter-btn" class="p-2 text-gray-500 hover:text-green-700">
+                            <i class="fas fa-filter"></i>
+                        </button>
+                        <button id="search-btn" class="p-2 text-gray-500 hover:text-green-700">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mb-4 hidden" id="filter-section">
+                    <div class="grid grid-cols-2 gap-2">
+                        <select id="filter-item" class="p-2 border border-gray-300 rounded-md">
+                            <option value="">Semua Jenis</option>
+                            <option value="besi">Besi</option>
+                            <option value="plastik">Plastik</option>
+                            <option value="kertas">Kertas</option>
+                        </select>
+                        <input id="filter-date" type="date" class="p-2 border border-gray-300 rounded-md">
+                    </div>
+                </div>
+                
+                <div class="mb-4 hidden" id="search-section">
+                    <input id="search-input" type="text" placeholder="Cari transaksi..." class="w-full p-2 border border-gray-300 rounded-md">
+                </div>
+                
+                <div id="transactions-list" class="space-y-3">
+                    <p class="text-gray-500 text-center py-4">Belum ada transaksi</p>
+                </div>
+                
+                <div class="mt-4 flex justify-between items-center no-print">
+                    <button id="clear-history-btn" class="px-4 py-2 text-red-600 hover:text-red-800 text-sm">
+                        <i class="fas fa-trash-alt mr-2"></i> Hapus Semua Riwayat
+                    </button>
+                    <button id="print-history-btn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">
+                        <i class="fas fa-print mr-2"></i> Cetak Riwayat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // App version
+        const APP_VERSION = "1.1.0";
+        
+        // Initialize transactions array from localStorage or empty array
+        let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+        
+        // DOM elements
+        const homeTab = document.getElementById('home-tab');
+        const addTab = document.getElementById('add-tab');
+        const historyTab = document.getElementById('history-tab');
+        
+        const homeContent = document.getElementById('home-content');
+        const addContent = document.getElementById('add-content');
+        const historyContent = document.getElementById('history-content');
+        
+        const itemSelect = document.getElementById('item-select');
+        const weightInput = document.getElementById('weight-input');
+        const priceInput = document.getElementById('price-input');
+        const customerInput = document.getElementById('customer-input');
+        const saveBtn = document.getElementById('save-btn');
+        
+        const totalTransactionsEl = document.getElementById('total-transactions');
+        const totalWeightEl = document.getElementById('total-weight');
+        const totalValueEl = document.getElementById('total-value');
+        const itemStatsEl = document.getElementById('item-stats');
+        const recentTransactionsEl = document.getElementById('recent-transactions');
+        const transactionsListEl = document.getElementById('transactions-list');
+        
+        const filterBtn = document.getElementById('filter-btn');
+        const searchBtn = document.getElementById('search-btn');
+        const filterSection = document.getElementById('filter-section');
+        const searchSection = document.getElementById('search-section');
+        const filterItem = document.getElementById('filter-item');
+        const filterDate = document.getElementById('filter-date');
+        const searchInput = document.getElementById('search-input');
+        
+        const printBtn = document.getElementById('print-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const importBtn = document.getElementById('import-btn');
+        const printHistoryBtn = document.getElementById('print-history-btn');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
+        
+        // Modal elements
+        const importModal = document.getElementById('importModal');
+        const exportModal = document.getElementById('exportModal');
+        const importFile = document.getElementById('importFile');
+        const importMode = document.getElementById('importMode');
+        const confirmImport = document.getElementById('confirmImport');
+        const exportCurrent = document.getElementById('exportCurrent');
+        const exportBackup = document.getElementById('exportBackup');
+        const exportStats = document.getElementById('exportStats');
+        const closeButtons = document.querySelectorAll('.close');
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Update active tab
+            document.querySelectorAll('.tab-button').forEach(tab => {
+                tab.classList.remove('active', 'text-green-700', 'border-green-700');
+                tab.classList.add('text-gray-500');
+            });
+            
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+                content.classList.add('hidden');
+            });
+            
+            if (tabName === 'home') {
+                homeTab.classList.add('active', 'text-green-700', 'border-green-700');
+                homeTab.classList.remove('text-gray-500');
+                homeContent.classList.add('active');
+                homeContent.classList.remove('hidden');
+                updateDashboard();
+            } else if (tabName === 'add') {
+                addTab.classList.add('active', 'text-green-700', 'border-green-700');
+                addTab.classList.remove('text-gray-500');
+                addContent.classList.add('active');
+                addContent.classList.remove('hidden');
+            } else if (tabName === 'history') {
+                historyTab.classList.add('active', 'text-green-700', 'border-green-700');
+                historyTab.classList.remove('text-gray-500');
+                historyContent.classList.add('active');
+                historyContent.classList.remove('hidden');
+                renderTransactions();
+            }
+        }
+        
+        // Update dashboard stats
+        function updateDashboard() {
+            totalTransactionsEl.textContent = transactions.length;
+            
+            const totalWeight = transactions.reduce((sum, t) => sum + parseFloat(t.weight), 0);
+            totalWeightEl.textContent = totalWeight.toFixed(1) + ' kg';
+            
+            const totalValue = transactions.reduce((sum, t) => sum + t.total, 0);
+            totalValueEl.textContent = 'Rp ' + formatNumber(totalValue);
+            
+            // Update item statistics
+            const itemStats = {};
+            transactions.forEach(t => {
+                if (!itemStats[t.item]) {
+                    itemStats[t.item] = { count: 0, weight: 0, value: 0 };
+                }
+                itemStats[t.item].count++;
+                itemStats[t.item].weight += parseFloat(t.weight);
+                itemStats[t.item].value += t.total;
+            });
+            
+            itemStatsEl.innerHTML = '';
+            for (const [item, stats] of Object.entries(itemStats)) {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'flex justify-between items-center p-2 bg-gray-50 rounded';
+                
+                const itemNameEl = document.createElement('span');
+                itemNameEl.className = 'font-medium capitalize';
+                itemNameEl.textContent = item;
+                
+                const itemDetailsEl = document.createElement('div');
+                itemDetailsEl.className = 'text-right text-sm';
+                
+                const weightEl = document.createElement('div');
+                weightEl.textContent = stats.weight.toFixed(1) + ' kg';
+                
+                const valueEl = document.createElement('div');
+                valueEl.className = 'font-medium';
+                valueEl.textContent = 'Rp ' + formatNumber(stats.value);
+                
+                itemDetailsEl.appendChild(weightEl);
+                itemDetailsEl.appendChild(valueEl);
+                itemEl.appendChild(itemNameEl);
+                itemEl.appendChild(itemDetailsEl);
+                itemStatsEl.appendChild(itemEl);
+            }
+            
+            // Update recent transactions
+            recentTransactionsEl.innerHTML = '';
+            if (transactions.length === 0) {
+                recentTransactionsEl.innerHTML = '<p class="text-gray-500 text-center py-4">Belum ada transaksi</p>';
+            } else {
+                const recent = transactions.slice(-3).reverse();
+                recent.forEach(t => {
+                    const transactionEl = document.createElement('div');
+                    transactionEl.className = 'transaction-item p-3 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer';
+                    transactionEl.innerHTML = `
+                        <div class="flex justify-between">
+                            <div>
+                                <span class="font-medium capitalize">${t.item}</span>
+                                <span class="text-sm text-gray-500 ml-2">${t.weight} kg × Rp ${formatNumber(t.price)}</span>
+                            </div>
+                            <div class="font-medium">Rp ${formatNumber(t.total)}</div>
+                        </div>
+                        <div class="text-sm text-gray-500 mt-1">${formatDate(t.timestamp)} • ${t.customer || 'Tanpa nama'}</div>
+                    `;
+                    recentTransactionsEl.appendChild(transactionEl);
+                });
+            }
+        }
+        
+        // Render transactions in history tab
+        function renderTransactions(filter = '', date = '') {
+            transactionsListEl.innerHTML = '';
+            
+            let filteredTransactions = [...transactions];
+            
+            if (filter) {
+                filteredTransactions = filteredTransactions.filter(t => t.item === filter);
+            }
+            
+            if (date) {
+                filteredTransactions = filteredTransactions.filter(t => {
+                    const transactionDate = new Date(t.timestamp).toISOString().split('T')[0];
+                    return transactionDate === date;
+                });
+            }
+            
+            if (filteredTransactions.length === 0) {
+                transactionsListEl.innerHTML = '<p class="text-gray-500 text-center py-4">Tidak ada transaksi</p>';
+                return;
+            }
+            
+            filteredTransactions.reverse().forEach(t => {
+                const transactionEl = document.createElement('div');
+                transactionEl.className = 'transaction-item p-3 border rounded-md hover:border-green-300';
+                transactionEl.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="font-medium capitalize">${t.item}</span>
+                            <span class="text-sm text-gray-500 ml-2">${t.weight} kg × Rp ${formatNumber(t.price)}</span>
+                        </div>
+                        <div class="font-medium text-green-700">Rp ${formatNumber(t.total)}</div>
+                    </div>
+                    <div class="flex justify-between items-center mt-2">
+                        <div class="text-sm text-gray-500">${formatDate(t.timestamp)} • ${t.customer || 'Tanpa nama'}</div>
+                        <button class="delete-btn p-1 text-gray-400 hover:text-red-500" data-id="${t.id}">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+                transactionsListEl.appendChild(transactionEl);
+            });
+            
+            // Add event listeners to delete buttons
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = parseInt(btn.getAttribute('data-id'));
+                    deleteTransaction(id);
+                });
+            });
+        }
+        
+        // Add new transaction
+        function addTransaction() {
+            const item = itemSelect.value;
+            const weight = weightInput.value;
+            const price = priceInput.value;
+            const customer = customerInput.value;
+            
+            if (!item || !weight || !price) {
+                alert('Harap isi jenis rosok, berat, dan harga!');
+                return;
+            }
+            
+            const newTransaction = {
+                id: Date.now(),
+                item,
+                weight: parseFloat(weight).toFixed(1),
+                price: parseInt(price),
+                customer,
+                total: parseFloat(weight) * parseInt(price),
+                timestamp: new Date().toISOString()
+            };
+            
+            transactions.push(newTransaction);
+            saveTransactions();
+            
+            // Reset form
+            itemSelect.value = '';
+            weightInput.value = '';
+            priceInput.value = '';
+            customerInput.value = '';
+            
+            // Switch to home tab
+            switchTab('home');
+        }
+        
+        // Delete transaction
+        function deleteTransaction(id) {
+            if (confirm('Apakah Anda yakin ingin menghapus transaksi ini?')) {
+                transactions = transactions.filter(t => t.id !== id);
+                saveTransactions();
+                renderTransactions(filterItem.value, filterDate.value);
+                updateDashboard();
+            }
+        }
+        
+        // Clear all history
+        function clearHistory() {
+            if (confirm('Apakah Anda yakin ingin menghapus semua riwayat transaksi?')) {
+                transactions = [];
+                saveTransactions();
+                renderTransactions();
+                updateDashboard();
+            }
+        }
+        
+        // Save transactions to localStorage
+        function saveTransactions() {
+            localStorage.setItem('transactions', JSON.stringify(transactions));
+        }
+        
+        // Export data as JSON
+        function exportData(type = 'current') {
+            let dataToExport;
+            const exportDate = new Date().toISOString().split('T')[0];
+            const exportTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/:/g, '-');
+            
+            switch(type) {
+                case 'backup':
+                    dataToExport = {
+                        app: "ReTrash",
+                        version: APP_VERSION,
+                        exportedAt: new Date().toISOString(),
+                        data: transactions,
+                        stats: generateStats()
+                    };
+                    break;
+                    
+                case 'stats':
+                    dataToExport = {
+                        app: "ReTrash",
+                        version: APP_VERSION,
+                        exportedAt: new Date().toISOString(),
+                        stats: generateStats()
+                    };
+                    break;
+                    
+                case 'current':
+                default:
+                    dataToExport = transactions;
+                    break;
+            }
+            
+            const dataStr = JSON.stringify(dataToExport, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            let exportFileDefaultName;
+            if (type === 'backup') {
+                exportFileDefaultName = `retrash-backup-${exportDate}_${exportTime}.json`;
+            } else if (type === 'stats') {
+                exportFileDefaultName = `retrash-stats-${exportDate}_${exportTime}.json`;
+            } else {
+                exportFileDefaultName = `retrash-data-${exportDate}_${exportTime}.json`;
+            }
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+        
+        // Generate statistics
+        function generateStats() {
+            const totalWeight = transactions.reduce((sum, t) => sum + parseFloat(t.weight), 0);
+            const totalValue = transactions.reduce((sum, t) => sum + t.total, 0);
+            
+            const itemStats = {};
+            transactions.forEach(t => {
+                if (!itemStats[t.item]) {
+                    itemStats[t.item] = { count: 0, weight: 0, value: 0 };
+                }
+                itemStats[t.item].count++;
+                itemStats[t.item].weight += parseFloat(t.weight);
+                itemStats[t.item].value += t.total;
+            });
+            
+            return {
+                totalTransactions: transactions.length,
+                totalWeight: parseFloat(totalWeight.toFixed(2)),
+                totalValue,
+                itemStats,
+                generatedAt: new Date().toISOString()
+            };
+        }
+        
+        // Import data from JSON file
+        function importData(file, mode) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    let newTransactions = [];
+                    
+                    // Handle different import formats
+                    if (Array.isArray(importedData)) {
+                        // Simple transaction array format
+                        newTransactions = importedData;
+                    } else if (importedData.data && Array.isArray(importedData.data)) {
+                        // Backup format with metadata
+                        newTransactions = importedData.data;
+                    } else {
+                        throw new Error("Format file tidak valid");
+                    }
+                    
+                    // Validate transactions
+                    const isValid = newTransactions.every(t => 
+                        t.id && t.item && t.weight && t.price && t.total && t.timestamp
+                    );
+                    
+                    if (!isValid) {
+                        throw new Error("Data transaksi tidak valid");
+                    }
+                    
+                    if (mode === 'merge') {
+                        // Merge with existing data, avoiding duplicates
+                        const existingIds = transactions.map(t => t.id);
+                        const uniqueNewTransactions = newTransactions.filter(t => !existingIds.includes(t.id));
+                        transactions = [...transactions, ...uniqueNewTransactions];
+                        alert(`${uniqueNewTransactions.length} transaksi baru berhasil diimpor (${newTransactions.length - uniqueNewTransactions.length} duplikat diabaikan)`);
+                    } else {
+                        // Replace all data
+                        transactions = newTransactions;
+                        alert(`${newTransactions.length} transaksi berhasil diimpor (mengganti data lama)`);
+                    }
+                    
+                    saveTransactions();
+                    updateDashboard();
+                    renderTransactions();
+                    closeModal('importModal');
+                    
+                } catch (error) {
+                    alert(`Gagal mengimpor data: ${error.message}`);
+                    console.error("Import error:", error);
+                }
+            };
+            
+            reader.onerror = function() {
+                alert("Gagal membaca file");
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // Format number with thousands separator
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        }
+        
+        // Format date
+        function formatDate(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleDateString('id-ID') + ' ' + date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        // Update current date and time
+        function updateDateTime() {
+            const now = new Date();
+            document.getElementById('current-date').textContent = now.toLocaleDateString('id-ID', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long', 
+                year: 'numeric' 
+            });
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('id-ID', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+        
+        // Modal functions
+        function openModal(modalId) {
+            document.getElementById(modalId).style.display = 'block';
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+        
+        // Initialize the app
+        function init() {
+            // Set up event listeners
+            homeTab.addEventListener('click', () => switchTab('home'));
+            addTab.addEventListener('click', () => switchTab('add'));
+            historyTab.addEventListener('click', () => switchTab('history'));
+            
+            saveBtn.addEventListener('click', addTransaction);
+            
+            filterBtn.addEventListener('click', () => {
+                filterSection.classList.toggle('hidden');
+                searchSection.classList.add('hidden');
+            });
+            
+            searchBtn.addEventListener('click', () => {
+                searchSection.classList.toggle('hidden');
+                filterSection.classList.add('hidden');
+            });
+            
+            filterItem.addEventListener('change', () => {
+                renderTransactions(filterItem.value, filterDate.value);
+            });
+            
+            filterDate.addEventListener('change', () => {
+                renderTransactions(filterItem.value, filterDate.value);
+            });
+            
+            searchInput.addEventListener('input', () => {
+                const searchTerm = searchInput.value.toLowerCase();
+                const filtered = transactions.filter(t => 
+                    t.item.toLowerCase().includes(searchTerm) || 
+                    (t.customer && t.customer.toLowerCase().includes(searchTerm))
+                );
+                
+                transactionsListEl.innerHTML = '';
+                
+                if (filtered.length === 0) {
+                    transactionsListEl.innerHTML = '<p class="text-gray-500 text-center py-4">Tidak ada hasil pencarian</p>';
+                    return;
+                }
+                
+                filtered.reverse().forEach(t => {
+                    const transactionEl = document.createElement('div');
+                    transactionEl.className = 'transaction-item p-3 border rounded-md hover:border-green-300';
+                    transactionEl.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <span class="font-medium capitalize">${t.item}</span>
+                                <span class="text-sm text-gray-500 ml-2">${t.weight} kg × Rp ${formatNumber(t.price)}</span>
+                            </div>
+                            <div class="font-medium text-green-700">Rp ${formatNumber(t.total)}</div>
+                        </div>
+                        <div class="flex justify-between items-center mt-2">
+                            <div class="text-sm text-gray-500">${formatDate(t.timestamp)} • ${t.customer || 'Tanpa nama'}</div>
+                            <button class="delete-btn p-1 text-gray-400 hover:text-red-500" data-id="${t.id}">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    `;
+                    transactionsListEl.appendChild(transactionEl);
+                });
+            });
+            
+            printBtn.addEventListener('click', () => {
+                window.print();
+            });
+            
+            printHistoryBtn.addEventListener('click', () => {
+                window.print();
+            });
+            
+            exportBtn.addEventListener('click', () => openModal('exportModal'));
+            importBtn.addEventListener('click', () => openModal('importModal'));
+            
+            exportCurrent.addEventListener('click', () => {
+                exportData('current');
+                closeModal('exportModal');
+            });
+            
+            exportBackup.addEventListener('click', () => {
+                exportData('backup');
+                closeModal('exportModal');
+            });
+            
+            exportStats.addEventListener('click', () => {
+                exportData('stats');
+                closeModal('exportModal');
+            });
+            
+            confirmImport.addEventListener('click', () => {
+                if (importFile.files.length > 0) {
+                    importData(importFile.files[0], importMode.value);
+                } else {
+                    alert('Silakan pilih file terlebih dahulu');
+                }
+            });
+            
+            clearHistoryBtn.addEventListener('click', clearHistory);
+            
+            // Close modals when clicking X
+            closeButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const modal = this.closest('.modal');
+                    modal.style.display = 'none';
+                });
+            });
+            
+            // Close modals when clicking outside
+            window.addEventListener('click', (event) => {
+                if (event.target.classList.contains('modal')) {
+                    event.target.style.display = 'none';
+                }
+            });
+            
+            // Register service worker
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('/sw.js')
+                        .then(registration => {
+                            console.log('ServiceWorker registration successful');
+                        })
+                        .catch(err => {
+                            console.log('ServiceWorker registration failed: ', err);
+                        });
+                });
+            }
+            
+            // Update date and time every minute
+            updateDateTime();
+            setInterval(updateDateTime, 60000);
+            
+            // Initialize dashboard
+            updateDashboard();
+        }
+        
+        // Start the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
